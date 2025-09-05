@@ -1,0 +1,1 @@
+# No external dependencies required; Tkinter ships with Python on most systems.
