@@ -22,6 +22,7 @@ FSHARP_KEYWORDS = {
 # Multi-character operators should be matched before single-character ones
 FSHARP_MULTI_CHAR_OPERATORS = [
     ">>=", "<=", ">=", "<>", "<-", ":=", "|>", "<|", ">>", "<<", "::",
+    "**", "&&", "||", "&&&", "|||", "^^^", "~~~", "<<<", ">>>", "@",
 ]
 
 FSHARP_SINGLE_CHAR_OPERATORS = list(
@@ -148,17 +149,181 @@ def _classify_tokens(tokens: List[str], special_counts: Dict[str, int]) -> Tuple
     multi_ops = set(FSHARP_MULTI_CHAR_OPERATORS)
     single_ops = set(FSHARP_SINGLE_CHAR_OPERATORS)
 
-    for tok in tokens:
+    # Track compound operators
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
         lower_tok = tok.lower()
+        
+        # Check for compound operators
+        if lower_tok == "for" and i + 2 < len(tokens):
+            # Look for "for ... in ... do" or "for ... to ... do" patterns
+            found_in = False
+            found_to = False
+            found_do = False
+            j = i + 1
+            while j < len(tokens) and j < i + 10:  # reasonable lookahead
+                if tokens[j].lower() == "in":
+                    found_in = True
+                elif tokens[j].lower() == "to":
+                    found_to = True
+                elif tokens[j].lower() == "do" and (found_in or found_to):
+                    found_do = True
+                    break
+                j += 1
+            
+            if found_in and found_do:
+                operator_counts["for-in-do"] += 1
+                # Skip the constituent tokens
+                k = i + 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "in":
+                        k += 1
+                        break
+                    k += 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "do":
+                        i = k + 1
+                        break
+                    k += 1
+                continue
+            elif found_to and found_do:
+                operator_counts["for-to-do"] += 1
+                # Skip the constituent tokens
+                k = i + 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "to":
+                        k += 1
+                        break
+                    k += 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "do":
+                        i = k + 1
+                        break
+                    k += 1
+                continue
+        
+        if lower_tok == "match" and i + 1 < len(tokens):
+            # Look for "match ... with" pattern
+            found_with = False
+            j = i + 1
+            while j < len(tokens) and j < i + 10:  # reasonable lookahead
+                if tokens[j].lower() == "with":
+                    found_with = True
+                    break
+                j += 1
+            
+            if found_with:
+                operator_counts["match-with"] += 1
+                # Skip to after 'with'
+                k = i + 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "with":
+                        i = k + 1
+                        break
+                    k += 1
+                continue
+        
+        if lower_tok == "while" and i + 1 < len(tokens):
+            # Look for "while ... do" pattern
+            found_do = False
+            j = i + 1
+            while j < len(tokens) and j < i + 10:  # reasonable lookahead
+                if tokens[j].lower() == "do":
+                    found_do = True
+                    break
+                j += 1
+            
+            if found_do:
+                operator_counts["while-do"] += 1
+                # Skip to after 'do'
+                k = i + 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "do":
+                        i = k + 1
+                        break
+                    k += 1
+                continue
+        
+        if lower_tok == "if" and i + 1 < len(tokens):
+            # Look for "if ... then ... else" pattern
+            found_then = False
+            found_else = False
+            j = i + 1
+            while j < len(tokens) and j < i + 15:  # reasonable lookahead
+                if tokens[j].lower() == "then":
+                    found_then = True
+                elif tokens[j].lower() == "else" and found_then:
+                    found_else = True
+                    break
+                j += 1
+            
+            if found_then:
+                if found_else:
+                    operator_counts["if-then-else"] += 1
+                    # Skip to after 'else'
+                    k = i + 1
+                    while k < len(tokens):
+                        if tokens[k].lower() == "else":
+                            i = k + 1
+                            break
+                        k += 1
+                else:
+                    operator_counts["if-then"] += 1
+                    # Skip to after 'then'
+                    k = i + 1
+                    while k < len(tokens):
+                        if tokens[k].lower() == "then":
+                            i = k + 1
+                            break
+                        k += 1
+                continue
+        
+        if lower_tok == "try" and i + 1 < len(tokens):
+            # Look for "try ... with" or "try ... finally" patterns
+            found_with = False
+            found_finally = False
+            j = i + 1
+            while j < len(tokens) and j < i + 15:  # reasonable lookahead
+                if tokens[j].lower() == "with":
+                    found_with = True
+                    break
+                elif tokens[j].lower() == "finally":
+                    found_finally = True
+                    break
+                j += 1
+            
+            if found_with:
+                operator_counts["try-with"] += 1
+                # Skip to after 'with'
+                k = i + 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "with":
+                        i = k + 1
+                        break
+                    k += 1
+                continue
+            elif found_finally:
+                operator_counts["try-finally"] += 1
+                # Skip to after 'finally'
+                k = i + 1
+                while k < len(tokens):
+                    if tokens[k].lower() == "finally":
+                        i = k + 1
+                        break
+                    k += 1
+                continue
 
         # Numbers: operands
         if _RE_NUMBER.fullmatch(tok):
             operand_counts[tok] += 1
+            i += 1
             continue
 
         # String/char literals begin and end with quotes: operands
         if (len(tok) >= 2 and ((tok[0] == '"' and tok[-1] == '"') or (tok[0] == "'" and tok[-1] == "'"))):
             operand_counts[tok] += 1
+            i += 1
             continue
 
         # Multi and single character operators
@@ -166,18 +331,23 @@ def _classify_tokens(tokens: List[str], special_counts: Dict[str, int]) -> Tuple
             # Do not count '(' or ')' here; they were handled via pairs
             if tok not in {"(", ")"}:
                 operator_counts[tok] += 1
+            i += 1
             continue
 
         # Identifiers and keywords
         if _RE_IDENTIFIER.fullmatch(tok):
             if lower_tok in FSHARP_KEYWORDS:
-                operator_counts[lower_tok] += 1
+                # Skip individual keywords that are part of compound operators
+                if lower_tok not in {"for", "in", "do", "match", "with", "while", "if", "then", "else", "try", "finally", "to"}:
+                    operator_counts[lower_tok] += 1
             else:
                 operand_counts[tok] += 1
+            i += 1
             continue
 
         # Fallback: if something slips through, treat punctuation as operator
         operator_counts[tok] += 1
+        i += 1
 
     return operator_counts, operand_counts
 
