@@ -1,5 +1,3 @@
-open System
-
 // Пользовательские подпрограммы
 let rec factorial n =
     match n with

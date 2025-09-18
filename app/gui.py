@@ -42,8 +42,7 @@ class HalsteadApp(tk.Tk):
 
         self.operators_tree = self._create_table(right, ("Operator", "Count"), "Operators")
         self.operands_tree = self._create_table(right, ("Operand", "Count"), "Operands")
-        self.metrics_tree = self._create_table(right, ("Metric", "Value"), "Base Metrics")
-        self.extended_tree = self._create_table(right, ("Metric", "Value"), "Extended")
+        self.metrics_tree = self._create_table(right, ("Metric", "Value"), "Metrics")
 
     def _create_table(self, parent: ttk.Notebook, columns: tuple, title: str) -> ttk.Treeview:
         frame = ttk.Frame(parent)
@@ -84,7 +83,7 @@ class HalsteadApp(tk.Tk):
             messagebox.showerror("Error", str(e))
 
     def _populate_results(self, res: HalsteadResult) -> None:
-        for tree in (self.operators_tree, self.operands_tree, self.metrics_tree, self.extended_tree):
+        for tree in (self.operators_tree, self.operands_tree, self.metrics_tree):
             for item in tree.get_children():
                 tree.delete(item)
 
@@ -94,25 +93,21 @@ class HalsteadApp(tk.Tk):
         for opd, cnt in res.operand_frequencies:
             self.operands_tree.insert("", tk.END, values=(opd, cnt))
 
-        # Base metrics (4 scalar base metrics)
-        metrics = [
+        # All metrics in one table (base + extended)
+        all_metrics = [
+            # Base metrics (6 base metrics as per req.md)
             ("η₁ (unique operators)", res.eta1_unique_operators),
             ("η₂ (unique operands)", res.eta2_unique_operands),
             ("N₁ (total operators)", res.N1_total_operators),
             ("N₂ (total operands)", res.N2_total_operands),
-        ]
-
-        # Extended metrics as per req.md
-        extended = [
             ("η = η₁ + η₂ (vocabulary)", res.eta_vocabulary),
             ("N = N₁ + N₂ (length)", res.N_length),
+            # Extended metrics (3 extended metrics as per req.md)
             ("V = N log₂ η (volume)", f"{res.V_volume:.3f}"),
         ]
 
-        for name, val in metrics:
+        for name, val in all_metrics:
             self.metrics_tree.insert("", tk.END, values=(name, val))
-        for name, val in extended:
-            self.extended_tree.insert("", tk.END, values=(name, val))
 
 
 def run_app() -> None:
